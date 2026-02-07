@@ -1,10 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
+from flare_ai_defai.risk_avatar.manager import RiskAvatarManager
 
 import httpx
 import requests
-
+risk_avatar_manager = RiskAvatarManager()
 
 @dataclass
 class ModelResponse:
@@ -13,6 +14,28 @@ class ModelResponse:
     text: str
     raw_response: Any  # Original provider response
     metadata: dict[str, Any]
+
+
+def format_risk_avatar_message(avatar: Any) -> str:
+    if avatar.risk_mode == "calm":
+        return "🟢 **Risk Avatar**: Market conditions are calm."
+    elif avatar.risk_mode == "alert":
+        return "🟡 **Risk Avatar**: Market stress is rising."
+    else:
+        return "🔴 **Risk Avatar**: High market stress detected."
+
+
+def enrich_with_risk_avatar(response: ModelResponse) -> ModelResponse:
+    avatar_state = risk_avatar_manager.update()
+    risk_text = format_risk_avatar_message(avatar_state)
+
+    response.text = f"{response.text}\n\n---\n{risk_text}"
+    response.metadata["risk_avatar"] = {
+        "stress_level": avatar_state.stress_level,
+        "risk_mode": avatar_state.risk_mode,
+    }
+
+    return response
 
 
 @runtime_checkable

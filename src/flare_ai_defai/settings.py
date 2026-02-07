@@ -19,9 +19,14 @@ class Settings(BaseSettings):
     """
     Application settings model that provides configuration for all components.
     """
-
+    simulate_attestation: bool = False
+    simulate_ai: bool = False   # 👈 ADD THIS
+    cors_origins: list[str] = ["*"]
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-1.5-flash"
     # Flag to enable/disable attestation simulation
     simulate_attestation: bool = False
+    simulate_ai: bool = False
     # Restrict backend listener to specific IPs
     cors_origins: list[str] = ["*"]
     # API key for accessing Google's Gemini AI service

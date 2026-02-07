@@ -15,15 +15,23 @@ Dependencies:
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
+from flare_ai_defai.ai import GeminiProvider
+from flare_ai_defai.ai.dummy import DummyAIProvider
 from flare_ai_defai import (
     ChatRouter,
     FlareProvider,
-    GeminiProvider,
     PromptService,
     Vtpm,
 )
 from flare_ai_defai.settings import settings
+if settings.simulate_ai:
+    ai = DummyAIProvider()
+else:
+    ai = GeminiProvider(
+        api_key=settings.gemini_api_key,
+        model=settings.gemini_model,
+    )
+
 
 logger = structlog.get_logger(__name__)
 
@@ -54,6 +62,25 @@ def create_app() -> FastAPI:
         - web3_provider_url: URL for Web3 provider
         - simulate_attestation: Boolean flag for attestation simulation
     """
+    if settings.simulate_ai:
+        ai = GeminiProvider(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+    else:
+        ai = GeminiProvider(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+        )
+
+    chat = ChatRouter(
+        ai=ai,
+        blockchain=FlareProvider(settings.web3_provider_url),
+        attestation=Vtpm(simulate=settings.simulate_attestation),
+        prompts=PromptService(),
+    )
+
+
     app = FastAPI(
         title="AI Agent API", version=settings.api_version, redirect_slashes=False
     )

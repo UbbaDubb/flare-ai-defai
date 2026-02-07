@@ -6,13 +6,18 @@ with Google's Generative AI service. It handles chat sessions, content generatio
 and message management while maintaining a consistent AI personality.
 """
 
+import json
 from typing import Any, override
 
 import google.generativeai as genai
 import structlog
-from google.generativeai.types import ContentDict
-
-from flare_ai_defai.ai.base import BaseAIProvider, ModelResponse
+from google.generativeai.types import ContentDict, GenerationConfig
+from flare_ai_defai.settings import settings
+from flare_ai_defai.ai.base import (
+    BaseAIProvider,
+    ModelResponse,
+    enrich_with_risk_avatar,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -120,13 +125,22 @@ class GeminiProvider(BaseAIProvider):
                     - candidate_count: Number of generated candidates
                     - prompt_feedback: Feedback on the input prompt
         """
+        if settings.simulate_ai:
+            self.logger.debug("simulate_ai_generate", prompt=prompt)
+            return ModelResponse(
+                text=json.dumps({"simulated": True, "prompt": prompt[:80]}),
+                raw_response=None,
+                metadata={"simulated": True},
+            )
+
         response = self.model.generate_content(
             prompt,
-            generation_config=genai.GenerationConfig(  # pyright: ignore [reportPrivateImportUsage]
-                response_mime_type=response_mime_type, response_schema=response_schema
+            generation_config=GenerationConfig(
+                response_mime_type=response_mime_type,
+                response_schema=response_schema,
             ),
         )
-        self.logger.debug("generate", prompt=prompt, response_text=response.text)
+
         return ModelResponse(
             text=response.text,
             raw_response=response,
@@ -135,32 +149,25 @@ class GeminiProvider(BaseAIProvider):
                 "prompt_feedback": response.prompt_feedback,
             },
         )
+
 
     @override
-    def send_message(
-        self,
-        msg: str,
-    ) -> ModelResponse:
-        """
-        Send a message in a chat session and get the response.
+    def send_message(self, msg: str) -> ModelResponse:
+        # 🔹 DEV MODE: simulate AI
+        if settings.simulate_ai:
+            self.logger.debug("simulate_ai_response", message=msg)
+            return ModelResponse(
+                text=f"[SIMULATED ARTEMIS] I received: '{msg}'",
+                raw_response=None,
+                metadata={"simulated": True},
+            )
 
-        Initializes a new chat session if none exists, using the current chat history.
-
-        Args:
-            msg (str): Message to send to the chat session
-
-        Returns:
-            ModelResponse: Response from the chat session including:
-                - text: Generated response text
-                - raw_response: Complete Gemini response object
-                - metadata: Additional response information including:
-                    - candidate_count: Number of generated candidates
-                    - prompt_feedback: Feedback on the input message
-        """
+        # 🔹 REAL MODE: Gemini
         if not self.chat:
             self.chat = self.model.start_chat(history=self.chat_history)
+
         response = self.chat.send_message(msg)
-        self.logger.debug("send_message", msg=msg, response_text=response.text)
+
         return ModelResponse(
             text=response.text,
             raw_response=response,
@@ -169,3 +176,4 @@ class GeminiProvider(BaseAIProvider):
                 "prompt_feedback": response.prompt_feedback,
             },
         )
+

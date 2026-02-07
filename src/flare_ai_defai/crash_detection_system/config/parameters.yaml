@@ -1,0 +1,51 @@
+# Risk Analysis System Configuration
+# All tunable parameters - NO HARDCODED CONSTANTS IN CODE
+
+data:
+  filepath: "src/flare_ai_defai/crash_detection_system/data/btc_15m_data.csv"
+  required_history_bars: 1440  # ~15 days minimum
+
+signals:
+  volatility:
+    rv_window: 96               # 1 day (96 × 15min)
+    vol_regime_short: 96
+    vol_regime_long: 384        # 4 days
+    vov_window: 96
+    vov_lookback: 80
+    annualization_factor: 35040 # sqrt(365 * 24 * 4)
+  
+  leverage:
+    funding_fast_window: 32     # 8 hours
+    funding_slow_window: 96     # 24 hours
+    funding_stress_window: 120  # 30 hours (for median calculation)
+    lcvi_window: 288            # 3 days
+    lcvi_vol_ref_window: 720    # 7.5 days
+    dd_velocity_window: 288
+    annualization_factor: 35040 # sqrt(365 * 24 * 4)
+  
+  microstructure:
+    illiquidity_window: 96
+    illiquidity_ref_window: 720
+    tail_risk_window: 96
+
+models:
+  regime_hmm:
+    n_components: 3             # Calm, Volatile, Crash
+    covariance_type: "full"
+    n_iter: 1000
+    random_state: 42
+  
+  evt:
+    threshold_percentile: 95
+    var_confidence: 0.99        # 99% VaR
+    es_confidence: 0.99
+  
+  crash_probability:
+    lookback_horizon_bars: 96   # Predict crashes in next 24h
+    crash_threshold: -0.15      # 15% drop defines crash
+
+thresholds:
+  lcvi_warning: 2.0
+  lcvi_critical: 3.0
+  vol_regime_high: 1.5
+  tail_shape_heavy: 0.3

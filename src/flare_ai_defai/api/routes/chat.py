@@ -9,6 +9,7 @@ The module provides a ChatRouter class that integrates various services:
 - Blockchain operations through FlareProvider
 - Attestation services through Vtpm
 - Prompt management through PromptService
+- Risk Analysis through RiskEngine (NEW)
 """
 
 import json
@@ -24,6 +25,12 @@ from flare_ai_defai.attestation import Vtpm, VtpmAttestationError
 from flare_ai_defai.blockchain import FlareProvider
 from flare_ai_defai.prompts import PromptService, SemanticRouterResponse
 from flare_ai_defai.settings import settings
+
+# 🔹 NEW: Import risk analysis components
+from flare_ai_defai.crash_detection_system.integration import (
+    RiskAnalysisIntegration,
+    parse_user_intent_with_llm,
+)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -53,6 +60,7 @@ class ChatRouter:
         blockchain (FlareProvider): Provider for blockchain operations
         attestation (Vtpm): Provider for attestation services
         prompts (PromptService): Service for managing prompts
+        risk_integration (RiskAnalysisIntegration): Risk analysis engine (NEW)
         logger (BoundLogger): Structured logger for the chat router
     """
 
@@ -78,6 +86,15 @@ class ChatRouter:
         self.attestation = attestation
         self.prompts = prompts
         self.logger = logger.bind(router="chat")
+        
+        # 🔹 NEW: Initialize risk analysis integration
+        try:
+            self.risk_integration = RiskAnalysisIntegration()
+            self.logger.info("risk_engine_initialized")
+        except Exception as e:
+            self.logger.warning("risk_engine_init_failed", error=str(e))
+            self.risk_integration = None
+        
         self._setup_routes()
 
     def _setup_routes(self) -> None:
@@ -137,6 +154,10 @@ class ChatRouter:
                     self.attestation.attestation_requested = False
                     return {"response": resp}
 
+                # 🔹 NEW: Check if this is a risk analysis request BEFORE semantic routing
+                if self._is_risk_query(message.message):
+                    return await self.handle_risk_analysis(message.message)
+
                 route = await self.get_semantic_route(message.message)
                 return await self.route_message(route, message.message)
 
@@ -148,6 +169,84 @@ class ChatRouter:
     def router(self) -> APIRouter:
         """Get the FastAPI router with registered routes."""
         return self._router
+
+    # 🔹 NEW: Risk query detection
+    def _is_risk_query(self, message: str) -> bool:
+        """
+        Detect if message is a risk analysis query.
+        
+        Args:
+            message: User message
+        
+        Returns:
+            True if risk-related query
+        """
+        risk_keywords = [
+            'risk', 'crash', 'exposure', 'volatile', 'volatility',
+            'btc', 'bitcoin', 'position', 'hedge', 'drawdown',
+            'liquidation', 'var', 'downside', 'portfolio'
+        ]
+        
+        message_lower = message.lower()
+        return any(keyword in message_lower for keyword in risk_keywords)
+
+    # 🔹 NEW: Risk analysis handler
+    async def handle_risk_analysis(self, message: str) -> dict[str, str]:
+        """
+        Handle risk analysis requests.
+        
+        Flow:
+        1. LLM parses user intent (position size, risk appetite, horizon)
+        2. RiskEngine performs ALL mathematical analysis (NO LLM)
+        3. Format results as natural language
+        
+        Args:
+            message: User's natural language request
+        
+        Returns:
+            dict[str, str]: Formatted risk analysis response
+        """
+        try:
+            # Check if risk engine is available
+            if not self.risk_integration:
+                return {
+                    "response": "Risk analysis is currently unavailable. "
+                    "Please ensure btc_15m_data.csv is present or contact support."
+                }
+            
+            self.logger.info("risk_analysis_requested", message=message)
+            
+            # Step 1: LLM ONLY extracts user preferences (NO MATH)
+            intent = parse_user_intent_with_llm(self.ai, message)
+            
+            self.logger.debug(
+                "parsed_intent",
+                position_btc=intent.position_size_btc,
+                risk_appetite=intent.risk_appetite.value,
+                horizon_hours=intent.horizon_hours
+            )
+            
+            # Step 2: DETERMINISTIC risk analysis (ALL MATH HERE, NO LLM)
+            result = self.risk_integration.analyze(intent)
+            
+            # Step 3: Format response (can use LLM for natural language)
+            response = RiskAnalysisIntegration.format_response(result, intent)
+            
+            self.logger.info(
+                "risk_analysis_complete",
+                crash_prob=result.crash_prob,
+                regime=result.regime,
+                recommended_exposure=result.recommended_exposure
+            )
+            
+            return {"response": response}
+            
+        except Exception as e:
+            self.logger.exception("risk_analysis_failed", error=str(e))
+            return {
+                "response": f"Risk analysis encountered an error: {str(e)}\n\n"
+                "Please try again or contact support if the issue persists."
+            }
 
     async def handle_command(self, command: str) -> dict[str, str]:
         """
