@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 
 from flare_ai_defai.crash_detection_system.integration import RiskAnalysisIntegration
 from flare_ai_defai.crash_detection_system.types import RiskAppetite
-
+from flare_ai_defai.flare.flare_price import get_btc_usd_price
 
 # ---------- helpers ----------
 
@@ -43,8 +43,17 @@ def main() -> None:
     # Strict mode: FAIL if BTC data is missing (no dummy numbers)
     ri = RiskAnalysisIntegration(strict_data=True)
 
-    # Latest BTC price from the same OHLCV data RiskEngine uses
-    current_price = float(ri.data["close"].iloc[-1])
+    # Live price from Flare (FTSOv2), fallback to CSV close for demo resilience
+    try:
+        flare_px = get_btc_usd_price()
+        current_price = float(flare_px.price)
+        price_source = "flare-ftso-v2"
+        price_timestamp = flare_px.timestamp
+    except Exception:
+        current_price = float(ri.data["close"].iloc[-1])
+        price_source = "btc_15m_data.csv"
+        price_timestamp = None
+
 
     # Deterministic demo defaults
     horizon_hours = 24
@@ -60,13 +69,15 @@ def main() -> None:
         "timestamp": now_iso(),
         "asset": "BTC-USD",
         "price": current_price,
-        "source": "btc_15m_data.csv",
+        "price_source": price_source,        # "flare-ftso-v2" or fallback
+        "price_timestamp": price_timestamp,  # oracle timestamp
         "risk": ri.to_snapshot_dict(
-            result,
-            risk_profile,
-            horizon_hours,
+        result,
+        risk_profile,
+        horizon_hours,
         ),
     }
+
 
     out_path = Path("shared/latest_update.json")
     atomic_write_json(out_path, snapshot)
