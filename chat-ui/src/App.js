@@ -47,7 +47,6 @@ const ChatInterface = () => {
         (typeof data?.response === 'string' && data.response) ||
         (typeof data?.detail === 'string' && data.detail) ||
         (typeof data?.message === 'string' && data.message) ||
-        (data?.model ? JSON.stringify(data.model, null, 2) : null) ||
         'Sorry, I got an unexpected response from the server.';
 
       // Check if response contains a transaction preview

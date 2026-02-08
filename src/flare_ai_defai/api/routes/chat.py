@@ -461,124 +461,31 @@ class ChatRouter:
         return {"response": request_attestation_response.text}
     
     async def handle_conversation(self, message: str) -> dict[str, Any]:
-    
-        """
-        Grounded conversation handler:
-        - Default: normal Gemini chat
-        - If user asks for analysis: load snapshot + enforce JSON schema + format nicely
-        """
-
-        # 1) Default: behave like normal Gemini chat
-        if not wants_analysis(message):
-            resp = self.ai.send_message(message)
-            return {"response": resp.text}
-
-        # 2) Analysis mode only when asked
         snapshot = load_snapshot()
 
-        grounded_prompt = f"""
-        SYSTEM:
-        You are an educational market-risk assistant for a demo DeFAI app.
-        You are NOT a financial advisor. Do not provide personalized financial advice.
-        Do NOT tell the user to buy/sell/hold or give specific trade instructions.
-        You MAY provide general, educational "things to consider" based on the snapshot.
+        prompt = f"""
+    SYSTEM:
+    You are Artemis, a helpful assistant for a demo Flare DeFAI app.
+    You are NOT a financial advisor.
+    Do not provide personalized financial advice.
+    Do NOT tell the user to buy/sell/hold or give trade instructions.
+    You MAY provide general, educational "things to consider".
 
-        CRITICAL RULES:
-        - You MUST reference and quote snapshot figures exactly as provided.
-        - If a value is missing in the snapshot, output null and say "not provided" (do not invent).
-        - Whenever you mention price/entropy/kl, include the numeric value.
-        - Output MUST be valid JSON ONLY (no markdown, no extra text).
+    GROUNDING:
+    You may use the following snapshot JSON as background context.
+    - If the user asks about the market, risk, price, volatility, entropy, KL, or "snapshot":
+    then incorporate relevant snapshot numbers naturally in your answer.
+    - If the user is NOT asking about markets/risk/snapshot, DO NOT mention the snapshot.
+    - Never invent missing values. If a field is null/missing, say "not provided".
 
-        SNAPSHOT_JSON:
-        {json.dumps(snapshot, indent=2) if snapshot is not None else "null"}
-        
-        USER_MESSAGE:
-        {message}
+SNAPSHOT_JSON (background context):
+{json.dumps(snapshot, indent=2) if snapshot is not None else "null"}
 
-        OUTPUT_JSON_SCHEMA (follow exactly):
-        {{
-        "disclaimer": "string",
-        "snapshot_echo": {{
-        "timestamp": "string or null",
-        "asset": "string or null",
-        "price": "number or null",
-        "state": "string or null",
-        "entropy": "number or null",
-        "kl": "number or null",
-        "tx_hash": "string or null"
-        }},
-        "interpretation": {{
-        "what_it_suggests": ["string"],
-        "what_to_watch_next": ["string"],
-        "risk_flags": ["string"]
-        }},
-        "suggested_checks": ["string"],
-        "questions_for_user": ["string"]
-        }}
-        """.strip()
+USER:
+{message}
 
-        resp = self.ai.send_message(grounded_prompt)
+Answer in normal conversational text (no JSON).
+""".strip()
 
-        # Default: behave like normal Gemini chat
-        if not wants_analysis(message):
-            resp = self.ai.send_message(message)
-        return {"response": resp.text}
-
-
-        try:
-            model_json = coerce_json(resp.text)
-
-            # Make a nice UI string (CRA chat can display this)
-            interp = model_json.get("interpretation") or {}
-            what = interp.get("what_it_suggests") or []
-            watch = interp.get("what_to_watch_next") or []
-            flags = interp.get("risk_flags") or []
-            checks = model_json.get("suggested_checks") or []
-            qs = model_json.get("questions_for_user") or []
-
-            def bullets(items):
-                return "\n".join([f"- {x}" for x in items]) if items else "- (none)"
-
-            # Snapshot echo (safe, model already echoed)
-            se = model_json.get("snapshot_echo") or {}
-            snap_line = (
-                f"Snapshot: asset={se.get('asset')}, price={se.get('price')}, "
-                f"state={se.get('state')}, entropy={se.get('entropy')}, kl={se.get('kl')}, "
-                f"timestamp={se.get('timestamp')}"
-            )
-
-            response_text = "\n".join([
-                model_json.get("disclaimer", "").strip(),
-                "",
-                snap_line,
-                "",
-                "What it suggests:",
-                bullets(what),
-                "",
-                "What to watch next:",
-                bullets(watch),
-                "",
-                "Risk flags:",
-                bullets(flags),
-                "",
-                "Suggested checks:",
-                bullets(checks),
-                "",
-                "Questions for you:",
-                bullets(qs),
-            ]).strip()
-
-            return {
-                "response": response_text,
-                "model": model_json,
-                "snapshot": snapshot,
-            }
-
-        except Exception as e:
-            raise HTTPException(
-                status_code=500,
-                detail=f"Model returned non-JSON. First 500 chars:\n{resp.text[:500]}",
-            ) from e
-
-
-
+        resp = self.ai.send_message(prompt)
+        return {"response": resp.text, "snapshot": snapshot}
