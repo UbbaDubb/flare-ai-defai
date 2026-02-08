@@ -72,7 +72,7 @@ def main() -> None:
 
     # Deterministic demo defaults
     horizon_hours = 24
-    risk_profile = RiskAppetite.MEDIUM
+    #risk_profile = RiskAppetite.MEDIUM
 
     # Run deterministic risk analysis
     result = ri.analyze_for_snapshot(

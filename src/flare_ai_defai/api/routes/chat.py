@@ -32,10 +32,10 @@ from flare_ai_defai.prompts import PromptService, SemanticRouterResponse
 from flare_ai_defai.settings import settings
 
 # 🔹 NEW: Import risk analysis components
-#from flare_ai_defai.crash_detection_system.integration import (
-#    RiskAnalysisIntegration,
-#    parse_user_intent_with_llm,
-#)
+from flare_ai_defai.crash_detection_system.integration import (
+    RiskAnalysisIntegration,
+    parse_user_intent_with_llm,
+)
 
 logger = structlog.get_logger(__name__)
 router = APIRouter()
@@ -146,7 +146,15 @@ class ChatRouter:
         #    self.logger.info("risk_engine_initialized")
         #except Exception as e:
         #    self.logger.warning("risk_engine_init_failed", error=str(e))
-        self.risk_integration = None
+
+                # Initialize deterministic risk analysis
+        try:
+            self.risk_integration = RiskAnalysisIntegration(strict_data=True)
+            self.logger.info("risk_engine_initialized")
+        except Exception as e:
+            self.risk_integration = None
+            self.logger.warning("risk_engine_init_failed", error=str(e))
+
         
         self._setup_routes()
 
@@ -211,8 +219,8 @@ class ChatRouter:
                 #
 
                 # 🔹 NEW: Check if this is a risk analysis request BEFORE semantic routing
-                #if self._is_risk_query(message.message):
-                #    return await self.handle_risk_analysis(message.message)
+                if self._is_risk_query(message.message):
+                    return await self.handle_risk_analysis(message.message)
 
                 route = await self.get_semantic_route(message.message)
                 return await self.route_message(route, message.message)
@@ -285,6 +293,11 @@ class ChatRouter:
             # Step 2: DETERMINISTIC risk analysis (ALL MATH HERE, NO LLM)
             result = self.risk_integration.analyze(intent)
             
+            snapshot = load_snapshot()
+            if snapshot and snapshot.get("price") is not None:
+                result.current_price = float(snapshot["price"])
+
+
             # Step 3: Format response (can use LLM for natural language)
             response = RiskAnalysisIntegration.format_response(result, intent)
             
