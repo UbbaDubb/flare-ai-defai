@@ -6,7 +6,7 @@ Build BTC/USD market snapshot and write it to shared/latest_update.json.
 This script is the ONLY writer of the snapshot JSON.
 It uses deterministic outputs from RiskEngine (NO LLM).
 """
-
+import pandas as pd
 import json
 import os
 from pathlib import Path
@@ -15,14 +15,11 @@ from datetime import datetime, timezone
 from flare_ai_defai.crash_detection_system.integration import RiskAnalysisIntegration
 from flare_ai_defai.crash_detection_system.types import RiskAppetite
 from flare_ai_defai.flare.flare_price import get_btc_usd_price
+from flare_ai_defai.market_data.binance import update_latest
+
 
 # ---------- helpers ----------
-def update_latest_candles(df: pd.DataFrame) -> pd.DataFrame:
-    last_open_time = int(df["open_time"].iloc[-1])
-    new = fetch_all_klines(start_time_ms=last_open_time + 1)
-    if not new.empty:
-        df = pd.concat([df, new]).drop_duplicates("open_time")
-    return df
+
 
 
 
@@ -50,6 +47,16 @@ def atomic_write_json(path: Path, payload: dict) -> None:
 def main() -> None:
     # Strict mode: FAIL if BTC data is missing (no dummy numbers)
     ri = RiskAnalysisIntegration(strict_data=True)
+
+    # Refresh local BTC candles from Binance before analysis (keeps CSV up-to-date)
+    csv_path = Path("src/flare_ai_defai/crash_detection_system/data/btc_15m_data.csv")
+    df = pd.read_csv(csv_path)
+    df = update_latest(df)
+    df.to_csv(csv_path, index=False)
+
+    # Reload integration so it uses the refreshed file (simple + safe)
+    ri = RiskAnalysisIntegration(strict_data=True)
+
 
     # Live price from Flare (FTSOv2), fallback to CSV close for demo resilience
     try:

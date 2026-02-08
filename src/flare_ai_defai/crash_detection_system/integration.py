@@ -52,27 +52,41 @@ class RiskAnalysisIntegration:
         df.columns = [str(c).strip() for c in df.columns]
 
         # 2) Find timestamp column
-        if "Open time" in df.columns:
-            ts_col = "Open time"
+        preferred = ["open_time", "Open time", "timestamp", "time", "date"]
+        for c in preferred:
+            if c in df.columns:
+                ts_col = c
+                break
         else:
             candidates = [
                 c for c in df.columns
-                if any(k in c.lower() for k in ("open time", "timestamp", "time", "date"))
-        ]
+                if any(k in c.lower() for k in ("open time", "open_time", "timestamp", "time", "date"))
+            ]
             if not candidates:
                 raise ValueError(f"No timestamp column found. Columns: {list(df.columns)}")
             ts_col = candidates[0]
+
 
         # 3) Drop blank/missing timestamps
         s = df[ts_col].astype(str).str.strip()
         df = df[s.ne("")].copy()
 
-        # 4) Parse timestamps (microseconds supported)
-        df["timestamp"] = pd.to_datetime(
-            df[ts_col].astype(str).str.strip(),
-            errors="coerce",
-        )
+        # 4) Parse timestamps
+        ts = df[ts_col]
+
+        # Binance klines use epoch milliseconds (numeric)
+        if pd.api.types.is_numeric_dtype(ts):
+            df["timestamp"] = pd.to_datetime(ts, unit="ms", utc=True)
+        else:
+            # Could be strings like "00:00.0" (legacy) or ISO-ish
+            df["timestamp"] = pd.to_datetime(
+                ts.astype(str).str.strip(),
+                errors="coerce",
+                utc=True,
+            )
+
         df = df[df["timestamp"].notna()].copy()
+
 
         # 5) Normalize column names
         df = df.rename(columns={c: c.lower().replace(" ", "_") for c in df.columns})
