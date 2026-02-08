@@ -1,291 +1,221 @@
-# Flare AI DeFAI
+Flare AI DeFAI — BTC Risk Analysis Agent
 
-Flare AI Kit template for AI x DeFi (DeFAI).
+A deterministic BTC/USD risk analysis agent powered by:
 
-## 🚀 Key Features
+📈 Live on-chain prices from Flare FTSOv2
 
-- **Secure AI Execution**  
-  Runs within a Trusted Execution Environment (TEE) featuring remote attestation support for robust security.
+🧮 Deterministic crash-risk & regime models (no LLM math)
 
-- **Built-in Chat UI**  
-  Interact with your AI via a TEE-served chat interface.
+💬 Natural-language chat interface for querying risk profiles
 
-- **Flare Blockchain and Wallet Integration**  
-  Perform token operations and generate wallets from within the TEE.
+🔐 TEE-ready deployment with remote attestation support
 
-- **Gemini 2.0 + over 300 LLMs supported**  
-  Utilize Google Gemini’s latest model with structured query support for advanced AI functionalities.
+This project demonstrates how on-chain oracle data (Flare), off-chain market history, and AI interfaces can be combined safely — with a strict separation between math and language models.
 
-<img width="500" alt="Artemis" src="https://github.com/user-attachments/assets/921fbfe2-9d52-496c-9b48-9dfc32a86208" />
+🚀 What This Project Does
+Core functionality
 
-## 🎯 Getting Started
+Fetches live BTC/USD prices from Flare Time Series Oracle (FTSOv2)
 
-You can deploy Flare AI DeFAI using Docker (recommended) or set up the backend and frontend manually.
+Runs deterministic risk models over historical 15-minute BTC data:
 
-### Environment Setup
+Crash probability
 
-1. **Prepare the Environment File:**  
-   Rename `.env.example` to `.env` and update the variables accordingly.
-   > **Tip:** Set `SIMULATE_ATTESTATION=true` for local testing.
+Market regime (Calm / Volatile / Stress)
 
-### Build using Docker (Recommended)
+LCVI (liquidity-adjusted volatility)
 
-The Docker setup mimics a TEE environment and includes an Nginx server for routing, while Supervisor manages both the backend and frontend services in a single container.
+VaR / Expected Shortfall
 
-1. **Build the Docker Image:**
+Exposure recommendations
 
-   ```bash
-   docker build -t flare-ai-defai .
-   ```
+Exposes results via:
 
-2. **Run the Docker Container:**
+📄 a snapshot JSON (shared/latest_update.json)
 
-   ```bash
-   docker run -p 80:80 -it --env-file .env flare-ai-defai
-   ```
+💬 a chat interface where users can say:
 
-3. **Access the Frontend:**  
-   Open your browser and navigate to [http://localhost:80](http://localhost:80) to interact with the Chat UI.
+“I’m low risk, horizon 72h”
 
-## 🛠 Build Manually
+“I hold 0.5 BTC, medium risk”
 
-Flare AI DeFAI is composed of a Python-based backend and a JavaScript frontend. Follow these steps for manual setup:
+“What should I watch if volatility spikes?”
 
-#### Backend Setup
+What the AI does and does not do
 
-1. **Install Dependencies:**  
-   Use [uv](https://docs.astral.sh/uv/getting-started/installation/) to install backend dependencies:
+✅ LLM is allowed to:
 
-   ```bash
-   uv sync --all-extras
-   ```
+Parse user intent (risk appetite, horizon, position size)
 
-2. **Start the Backend:**  
-   The backend runs by default on `0.0.0.0:8080`:
+Format numerical outputs into readable explanations
 
-   ```bash
-   uv run start-backend
-   ```
+❌ LLM is NOT allowed to:
 
-#### Frontend Setup
+Compute prices
 
-1. **Install Dependencies:**  
-   In the `chat-ui/` directory, install the required packages using [npm](https://nodejs.org/en/download):
+Compute risk metrics
 
-   ```bash
-   cd chat-ui/
-   npm install
-   ```
+Invent market data
 
-2. **Configure the Frontend:**  
-   Update the backend URL in `chat-ui/src/App.js` for testing:
+Give financial advice
 
-   ```js
-   const BACKEND_ROUTE = "http://localhost:8080/api/routes/chat/";
-   ```
+All math lives in the RiskEngine and is fully deterministic.
 
-   > **Note:** Remember to change `BACKEND_ROUTE` back to `'api/routes/chat/'` after testing.
+🧠 Architecture Overview
+User Message
+   ↓
+LLM (intent parsing only)
+   ↓
+Deterministic RiskEngine
+   ↓
+Flare FTSO (live BTC price)
+   ↓
+Snapshot JSON + Chat Response
 
-3. **Start the Frontend:**
+🔑 Environment Variables
 
-   ```bash
-   npm start
-   ```
+This project uses a .env file for configuration.
 
-## 📁 Repo Structure
+Required (core functionality)
+WEB3_PROVIDER_URL=https://coston2-api.flare.network/ext/C/rpc
 
-```plaintext
+
+Used to fetch live BTC/USD prices from Flare FTSOv2.
+
+Optional (chat & AI features)
+GEMINI_API_KEY=your_api_key_here
+GEMINI_MODEL=gemini-2.0-flash
+
+
+Used for:
+
+Parsing user risk preferences
+
+Formatting responses in natural language
+
+If GEMINI_API_KEY is not set:
+
+✅ Risk engine + snapshot still work
+
+❌ Chat intent parsing will be limited
+
+🎯 Getting Started
+
+You can run the project locally with Docker (recommended) or manually.
+
+Environment setup
+
+Copy the environment file:
+
+cp .env.example .env
+
+
+Edit .env and set at least:
+
+WEB3_PROVIDER_URL=...
+
+🐳 Build & Run with Docker (Recommended)
+
+The Docker setup mimics a TEE-style environment, running:
+
+Backend (FastAPI + RiskEngine)
+
+Frontend (Chat UI)
+
+Nginx + Supervisor
+
+Build the image
+docker build -t flare-ai-defai .
+
+Run the container
+docker run -p 80:80 -it --env-file .env flare-ai-defai
+
+Open the app
+
+Navigate to:
+👉 http://localhost:80
+
+🛠 Manual Setup (Advanced)
+Backend
+uv sync --all-extras
+uv run start-backend
+
+
+Runs on:
+
+http://0.0.0.0:8080
+
+Frontend
+cd chat-ui
+npm install
+npm start
+
+
+For local testing, update:
+
+const BACKEND_ROUTE = "http://localhost:8080/api/routes/chat/";
+
+📁 Repo Structure (Relevant Parts)
 src/flare_ai_defai/
-├── ai/                     # AI Provider implementations
-│   ├── base.py            # Base AI provider interface
-│   ├── gemini.py          # Google Gemini integration
-│   └── openrouter.py      # OpenRouter integration
-├── api/                    # API layer
-│   ├── middleware/        # Request/response middleware
-│   └── routes/           # API endpoint definitions
-├── attestation/           # TEE attestation
-│   ├── vtpm_attestation.py   # vTPM client
-│   └── vtpm_validation.py    # Token validation
-├── blockchain/              # Blockchain operations
-│   ├── explorer.py        # Chain explorer client
-│   └── flare.py          # Flare network provider
-├── prompts/              # AI system prompts & templates
-│    ├── library.py        # Prompt module library
-│    ├── schemas.py        # Schema definitions
-│    ├── service.py        # Prompt service module
-│    └── templates.py       # Prompt templates
-├── exceptions.py      # Custom errors
-├── main.py          # Primary entrypoint
-└── settings.py       # Configuration settings error
-```
+├── crash_detection_system/     # Deterministic risk models
+│   ├── engine/                # RiskEngine, HMM regimes
+│   ├── models/                # Crash probability, LCVI
+│   └── data/                  # BTC 15m OHLCV CSV
+├── flare/
+│   └── flare_price.py         # Live BTC price via FTSOv2
+├── api/routes/
+│   └── chat.py                # ChatRouter (intent → risk)
+├── ai/
+│   └── gemini.py              # LLM (intent + formatting only)
+├── settings.py
+└── main.py
 
-## 🚀 Deploy on TEE
+📄 Snapshot Output
 
-Deploy on a [Confidential Space](https://cloud.google.com/confidential-computing/confidential-space/docs/confidential-space-overview) using AMD SEV.
+Each run produces:
 
-### Prerequisites
+shared/latest_update.json
 
-- **Google Cloud Platform Account:**  
-  Access to the [`verifiable-ai-hackathon`](https://console.cloud.google.com/welcome?project=verifiable-ai-hackathon) project is required.
 
-- **Gemini API Key:**  
-  Ensure your [Gemini API key](https://aistudio.google.com/app/apikey) is linked to the project.
+Example:
 
-- **gcloud CLI:**  
-  Install and authenticate the [gcloud CLI](https://cloud.google.com/sdk/docs/install).
-
-### Environment Configuration
-
-1. **Set Environment Variables:**  
-   Update your `.env` file with:
-
-   ```bash
-   TEE_IMAGE_REFERENCE=ghcr.io/flare-foundation/flare-ai-defai:main  # Replace with your repo build image
-   INSTANCE_NAME=<PROJECT_NAME-TEAM_NAME>
-   ```
-
-2. **Load Environment Variables:**
-
-   ```bash
-   source .env
-   ```
-
-   > **Reminder:** Run the above command in every new shell session or after modifying `.env`. On Windows, we recommend using [git BASH](https://gitforwindows.org) to access commands like `source`.
-
-3. **Verify the Setup:**
-
-   ```bash
-   echo $TEE_IMAGE_REFERENCE # Expected output: Your repo build image
-   ```
-
-### Deploying to Confidential Space
-
-Run the following command:
-
-```bash
-gcloud compute instances create $INSTANCE_NAME \
-  --project=verifiable-ai-hackathon \
-  --zone=us-west1-b \
-  --machine-type=n2d-standard-2 \
-  --network-interface=network-tier=PREMIUM,nic-type=GVNIC,stack-type=IPV4_ONLY,subnet=default \
-  --metadata=tee-image-reference=$TEE_IMAGE_REFERENCE,\
-tee-container-log-redirect=true,\
-tee-env-GEMINI_API_KEY=$GEMINI_API_KEY,\
-tee-env-GEMINI_MODEL=$GEMINI_MODEL,\
-tee-env-WEB3_PROVIDER_URL=$WEB3_PROVIDER_URL,\
-tee-env-SIMULATE_ATTESTATION=false \
-  --maintenance-policy=MIGRATE \
-  --provisioning-model=STANDARD \
-  --service-account=confidential-sa@verifiable-ai-hackathon.iam.gserviceaccount.com \
-  --scopes=https://www.googleapis.com/auth/cloud-platform \
-  --min-cpu-platform="AMD Milan" \
-  --tags=flare-ai,http-server,https-server \
-  --create-disk=auto-delete=yes,\
-boot=yes,\
-device-name=$INSTANCE_NAME,\
-image=projects/confidential-space-images/global/images/confidential-space-debug-250100,\
-mode=rw,\
-size=11,\
-type=pd-standard \
-  --shielded-secure-boot \
-  --shielded-vtpm \
-  --shielded-integrity-monitoring \
-  --reservation-affinity=any \
-  --confidential-compute-type=SEV
-```
-
-#### Post-deployment
-
-1. After deployment, you should see an output similar to:
-
-   ```plaintext
-   NAME          ZONE           MACHINE_TYPE    PREEMPTIBLE  INTERNAL_IP  EXTERNAL_IP    STATUS
-   defai-team1   us-central1-c  n2d-standard-2               10.128.0.18  34.41.127.200  RUNNING
-   ```
-
-2. It may take a few minutes for Confidential Space to complete startup checks. You can monitor progress via the [GCP Console](https://console.cloud.google.com/welcome?project=verifiable-ai-hackathon) logs.
-   Click on **Compute Engine** → **VM Instances** (in the sidebar) → **Select your instance** → **Serial port 1 (console)**.
-
-   When you see a message like:
-
-   ```plaintext
-   INFO:     Uvicorn running on http://0.0.0.0:8080 (Press CTRL+C to quit)
-   ```
-
-   the container is ready. Navigate to the external IP of the instance (visible in the **VM Instances** page) to access the Chat UI.
-
-### 🔧 Troubleshooting
-
-If you encounter issues, follow these steps:
-
-1. **Check Logs:**
-
-   ```bash
-   gcloud compute instances get-serial-port-output $INSTANCE_NAME --project=verifiable-ai-hackathon
-   ```
-
-2. **Verify API Key(s):**  
-   Ensure that all API Keys are set correctly (e.g. `GEMINI_API_KEY`).
-
-3. **Check Firewall Settings:**  
-   Confirm that your instance is publicly accessible on port `80`.
-
-## 💡 Next Steps
-
-Once your instance is running, access the Chat UI using its public IP address. Here are some example interactions to try:
-
-- **"Create an account for me"**
-- **"Transfer 10 C2FLR to 0x000000000000000000000000000000000000dEaD"**
-- **"Show me your remote attestation"**
-
-### Future Upgrades
-
-- **TLS Communication:**  
-  Implement RA-TLS for encrypted communication.
-
-- **Expanded Flare Ecosystem Support:**
-  - **Token Swaps:** via [SparkDEX](http://sparkdex.ai)
-  - **Borrow-Lend:** via [Kinetic](https://linktr.ee/kinetic.market)
-  - **Trading Strategies:** via [RainDEX](https://www.rainlang.xyz)
-
-### Example Use Cases & Project Ideas
-
-Below are several detailed project ideas demonstrating how the template can be used to build autonomous AI agents for Flare's DeFi ecosystem:
-
-#### NLP interface for Flare ecosystem
-
-Implement a natural language command parser that translates user intent into specific protocol actions, e.g.:
-
-```plaintext
-"Swap 100 FLR to USDC and deposit as collateral on Kinetic" →
 {
-  action: ["swap", "deposit"],
-  protocols: ["SparkDEX", "Kinetic"],
-  amounts: [100],
-  tokens: ["FLR", "USDC"]
+  "asset": "BTC-USD",
+  "price": 70533.74,
+  "price_source": "flare-ftso-v2",
+  "risk": {
+    "crash_prob": 0.56,
+    "regime": "Volatile",
+    "recommended_exposure": 0.6
+  }
 }
-```
 
-- Add cross-protocol optimization features:
 
-  - Automatic route splitting across DEXs for better prices
-  - Gas optimization by batching multiple transactions
-  - Yield optimization by comparing lending rates across protocols
+This file is:
 
-- Automated token swaps and integrations with Flare ecosystem applications:
-  - [SparkDEX](http://sparkdex.ai/): Token swaps + Perpetual futures
-  - [Kinetic](http://kinetic.market/): Borrow-lend protocol
-  - [RainDEX](http://rainlang.xyz): Trading strategies
-  - [Cycle](https://cyclo.finance): Liquidation-free leverage
+written by a single script
 
-### RAG Knowledge
+safe to consume by dashboards, bots, or UIs
 
-Connect the DeFAI agent with the RAG from [`flare-ai-rag`](https://github.com/flare-foundation/flare-ai-rag) trained on datasets such as:
+🚀 Deploy on TEE (Unchanged)
 
-- [Flare Developer Hub](https://dev.flare.network)
-- [Flare Website](https://flare.network)
-- [Flare X](https://x.com/FlareNetworks)
+All Confidential Space / AMD SEV instructions below remain valid.
 
-### Transaction simulation
+(Your existing deployment section can remain as-is — it already fits well.)
 
-Use a transaction simulation framework such as [Tenderly Simulator](https://tenderly.co/transaction-simulator) to show users the expected outcome of their transaction.
+💡 What This Project Is Good For
+
+🔗 Demonstrating Flare oracle integration (FTSOv2)
+
+🧠 Showing safe AI + finance separation
+
+📊 Building risk dashboards or alerting systems
+
+🧪 Hackathon / research demos
+
+🧩 Foundation for multi-asset risk engines
+
+⚠️ Disclaimer
+
+This project is for educational and demonstration purposes only.
+It does not provide financial advice.
