@@ -59,17 +59,19 @@ class RegimeHMM:
         return self
     
     def _sort_regimes(self) -> None:
-        """Sort regimes by increasing volatility"""
+        """Sort regimes by increasing volatility (variance)."""
 
         if self.model is None:
             return
 
         model = cast(GaussianHMM, self.model)
-        covars: np.ndarray = model.covars_.flatten()
-
-
+        covars = np.asarray(model.covars_)  # keep original shape
 
         # Extract per-regime variance (1D returns case)
+        # hmmlearn expects:
+        # - full: (n_components, n_dim, n_dim)
+        # - diag: (n_components, n_dim)
+        # - spherical: (n_components,)
         if covars.ndim == 3:          # full
             variances = covars[:, 0, 0]
         elif covars.ndim == 2:        # diag
@@ -79,10 +81,12 @@ class RegimeHMM:
 
         sorted_idx = np.argsort(variances)
 
-        self.model.means_ = self.model.means_[sorted_idx]
-        self.model.covars_ = covars[sorted_idx]
-        self.model.startprob_ = self.model.startprob_[sorted_idx]
-        self.model.transmat_ = self.model.transmat_[sorted_idx][:, sorted_idx]
+        # Reorder HMM parameters consistently
+        model.means_ = model.means_[sorted_idx]
+        model.covars_ = covars[sorted_idx]
+        model.startprob_ = model.startprob_[sorted_idx]
+        model.transmat_ = model.transmat_[sorted_idx][:, sorted_idx]
+
 
 
     

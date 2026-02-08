@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     web3_provider_url: str = "https://coston2-api.flare.network/ext/C/rpc"
     web3_explorer_url: str = "https://coston2-explorer.flare.network/"
 
-    # Snapshot JSON (dummy now, real later)
+    # Snapshot JSON
     latest_update_path: str = "shared/latest_update.json"
 
     model_config = SettingsConfigDict(
@@ -31,5 +31,13 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
+def _redact_settings(d: dict) -> dict:
+    redacted = dict(d)
+    # Add any other secrets you might introduce later
+    for k in ("gemini_api_key", "openrouter_api_key", "web3_private_key"):
+        if k in redacted and redacted[k]:
+            redacted[k] = "***REDACTED***"
+    return redacted
+
 settings = Settings()
-logger.debug("settings", settings=settings.model_dump())
+logger.debug("settings", settings=_redact_settings(settings.model_dump()))

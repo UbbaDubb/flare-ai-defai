@@ -37,31 +37,66 @@ class RiskAnalysisIntegration:
         self.data = self._load_data(strict=strict_data)
     
     def _load_data(self, strict: bool = True) -> pd.DataFrame:
-        """Load BTC 15min data"""
+        """Load BTC 15min data from teammate CSV (Open time format)."""
         data_path = Path(__file__).parent / "data" / "btc_15m_data.csv"
-    
+
         if not data_path.exists():
             if strict:
-                raise FileNotFoundError(
-                f"btc_15m_data.csv not found at: {data_path}"
-            )
+                raise FileNotFoundError(f"btc_15m_data.csv not found at: {data_path}")
             logger.warning("btc_15m_data.csv not found - using mock data")
             return self._create_mock_data()
-    
+
         df = pd.read_csv(data_path)
-    
-        # Parse timestamp
-        timestamp_col = [col for col in df.columns if 'time' in col.lower()][0]
-        df['timestamp'] = pd.to_datetime(df[timestamp_col])
-        df.set_index('timestamp', inplace=True)
-    
-        # Standardize columns
-        df = df.rename(columns={
-        col: col.lower().replace(' ', '_') 
-        for col in df.columns
-        })
-    
-        return df[['open', 'high', 'low', 'close', 'volume']]
+
+        # 1) Clean column names (Julia does strip)
+        df.columns = [str(c).strip() for c in df.columns]
+
+        # 2) Find timestamp column
+        if "Open time" in df.columns:
+            ts_col = "Open time"
+        else:
+            candidates = [
+                c for c in df.columns
+                if any(k in c.lower() for k in ("open time", "timestamp", "time", "date"))
+        ]
+            if not candidates:
+                raise ValueError(f"No timestamp column found. Columns: {list(df.columns)}")
+            ts_col = candidates[0]
+
+        # 3) Drop blank/missing timestamps
+        s = df[ts_col].astype(str).str.strip()
+        df = df[s.ne("")].copy()
+
+        # 4) Parse timestamps (microseconds supported)
+        df["timestamp"] = pd.to_datetime(
+            df[ts_col].astype(str).str.strip(),
+            errors="coerce",
+        )
+        df = df[df["timestamp"].notna()].copy()
+
+        # 5) Normalize column names
+        df = df.rename(columns={c: c.lower().replace(" ", "_") for c in df.columns})
+
+        # 6) Set index + deduplicate timestamps (CRITICAL FIX)
+        df = df.set_index("timestamp")
+        df = df[~df.index.duplicated(keep="last")].sort_index()
+
+        # 7) Ensure OHLCV columns exist
+        required = ["open", "high", "low", "close", "volume"]
+        missing = [c for c in required if c not in df.columns]
+        if missing:
+            raise ValueError(
+                f"Missing required columns {missing}. Columns present: {list(df.columns)}"
+            )
+
+        out = df[required].copy()
+
+        # 8) Force numeric (defensive)
+        for c in required:
+            out[c] = pd.to_numeric(out[c], errors="coerce")
+
+        out = out.dropna(subset=["open", "high", "low", "close"])
+        return out
 
     
     def _create_mock_data(self) -> pd.DataFrame:
@@ -120,6 +155,46 @@ class RiskAnalysisIntegration:
         
         return result
     
+    def analyze_for_snapshot(
+        self,
+        risk_appetite: RiskAppetite = RiskAppetite.MEDIUM,
+        horizon_hours: int = 24,
+    ) -> RiskAnalysisResult:
+        """
+        Deterministic risk analysis for snapshot production (NO LLM).
+        """
+        profile = RISK_PROFILES[risk_appetite]
+        return self.engine.evaluate(
+            data=self.data,
+            profile=profile,
+            horizon_hours=horizon_hours,
+    )
+
+    @staticmethod
+    def to_snapshot_dict(
+        result: RiskAnalysisResult,
+        risk_appetite: RiskAppetite,
+        horizon_hours: int,
+    ) -> dict[str, Any]:
+        """
+        Convert deterministic RiskAnalysisResult into a JSON-safe dict for snapshot JSON.
+        """
+        return {
+        "horizon_hours": int(horizon_hours),
+        "profile": risk_appetite.value,
+        "crash_prob": float(result.crash_prob),
+        "regime": str(result.regime),
+        "lcvi": float(result.lcvi),
+        "realized_vol": float(result.realized_vol),
+        "var_1d": float(result.var_1d),
+        "es_1d": float(result.es_1d),
+        "recommended_exposure": float(result.recommended_exposure),
+        "exposure_rationale": str(result.exposure_rationale),
+        "current_price": float(result.current_price),
+        "analysis_timestamp": str(result.analysis_timestamp),
+    }
+
+
     @staticmethod
     def format_response(result: RiskAnalysisResult, intent: UserIntent) -> str:
         """
