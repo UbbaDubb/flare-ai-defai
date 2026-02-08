@@ -450,42 +450,49 @@ class ChatRouter:
         Handle attestation requests.
 
         Args:
-            _: Unused message parameter
+        _: Unused message parameter
 
         Returns:
-            dict[str, str]: Response containing attestation request
+        dict[str, str]: Response containing attestation request
         """
         prompt = self.prompts.get_formatted_prompt("request_attestation")[0]
         request_attestation_response = self.ai.generate(prompt=prompt)
         self.attestation.attestation_requested = True
         return {"response": request_attestation_response.text}
+
+    
     
     async def handle_conversation(self, message: str) -> dict[str, Any]:
-        snapshot = load_snapshot()
+        use_snapshot = wants_analysis(message)  # you might rename this to wants_snapshot()
+        
+        snapshot = load_snapshot() if use_snapshot else None
+        grounding_snapshot = (
+            f"\nSNAPSHOT_JSON (background context):\n{json.dumps(snapshot, indent=2)}\n"
+            if snapshot is not None
+            else ""
+        )
 
         prompt = f"""
-    SYSTEM:
-    You are Artemis, a helpful assistant for a demo Flare DeFAI app.
-    You are NOT a financial advisor.
-    Do not provide personalized financial advice.
-    Do NOT tell the user to buy/sell/hold or give trade instructions.
-    You MAY provide general, educational "things to consider".
+        SYSTEM:
+        You are Artemis, a helpful assistant for a demo Flare DeFAI app.
+        You are NOT a financial advisor.
+        Do not provide personalized financial advice.
+        Do NOT tell the user to buy/sell/hold or give trade instructions.
+        You MAY provide general, educational "things to consider".
 
-    GROUNDING:
-    You may use the following snapshot JSON as background context.
-    - If the user asks about the market, risk, price, volatility, entropy, KL, or "snapshot":
-    then incorporate relevant snapshot numbers naturally in your answer.
-    - If the user is NOT asking about markets/risk/snapshot, DO NOT mention the snapshot.
-    - Never invent missing values. If a field is null/missing, say "not provided".
+        INSTRUCTIONS:
+        - Answer in normal conversational text (no JSON).
+        - If snapshot values are provided and relevant, weave them naturally into the answer.
+        - Never invent missing values. If a field is null/missing, say "not provided".
 
-SNAPSHOT_JSON (background context):
-{json.dumps(snapshot, indent=2) if snapshot is not None else "null"}
+        {grounding_snapshot}
 
-USER:
-{message}
-
-Answer in normal conversational text (no JSON).
-""".strip()
+        USER:
+        {message}
+        """.strip()
 
         resp = self.ai.send_message(prompt)
-        return {"response": resp.text, "snapshot": snapshot}
+        text = getattr(resp, "text", None)
+        if not isinstance(text, str) or not text.strip():
+                return {"response": "Sorry, I got an unexpected response from the server."}
+        return {"response": text}

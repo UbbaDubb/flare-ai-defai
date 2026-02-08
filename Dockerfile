@@ -21,6 +21,7 @@ RUN apt-get update && apt-get install -y nginx supervisor curl && \
 WORKDIR /app
 COPY --from=backend-builder /flare-ai-defai/.venv ./.venv
 COPY --from=backend-builder /flare-ai-defai/src ./src
+COPY --from=backend-builder /flare-ai-defai/shared ./shared
 COPY --from=backend-builder /flare-ai-defai/pyproject.toml .
 COPY --from=backend-builder /flare-ai-defai/README.md .
 
