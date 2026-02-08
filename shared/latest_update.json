@@ -1,9 +1,9 @@
 {
-  "timestamp": "2026-02-08T10:45:17Z",
+  "timestamp": "2026-02-08T11:01:39Z",
   "asset": "BTC-USD",
-  "price": 70193.31,
+  "price": 70226.43,
   "price_source": "flare-ftso-v2",
-  "price_timestamp": 1770547503,
+  "price_timestamp": 1770548494,
   "risk": {
     "horizon_hours": 24,
     "profile": "medium",
@@ -16,6 +16,6 @@
     "recommended_exposure": 0.3,
     "exposure_rationale": "Reduced exposure due to: crash_prob=0.74 (HIGH), LCVI=3.53 (CRITICAL)",
     "current_price": 113549.44,
-    "analysis_timestamp": "2026-02-08T10:45:17.701449"
+    "analysis_timestamp": "2026-02-08T11:01:39.931263"
   }
 }

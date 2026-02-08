@@ -17,6 +17,14 @@ from flare_ai_defai.crash_detection_system.types import RiskAppetite
 from flare_ai_defai.flare.flare_price import get_btc_usd_price
 
 # ---------- helpers ----------
+def update_latest_candles(df: pd.DataFrame) -> pd.DataFrame:
+    last_open_time = int(df["open_time"].iloc[-1])
+    new = fetch_all_klines(start_time_ms=last_open_time + 1)
+    if not new.empty:
+        df = pd.concat([df, new]).drop_duplicates("open_time")
+    return df
+
+
 
 def now_iso() -> str:
     return (
