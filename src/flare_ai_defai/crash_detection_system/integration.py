@@ -9,7 +9,7 @@ ALL MATH IS DONE IN RISK ENGINE.
 """
 import pandas as pd
 import structlog
-from typing import Dict, Any
+from typing import Any
 from pathlib import Path
 
 from .types import UserIntent, RiskAppetite, RISK_PROFILES, RiskAnalysisResult
@@ -32,32 +32,37 @@ class RiskAnalysisIntegration:
     - ALL trading recommendations
     """
     
-    def __init__(self):
+    def __init__(self, strict_data: bool = True):
         self.engine = RiskEngine()
-        self.data = self._load_data()
+        self.data = self._load_data(strict=strict_data)
     
-    def _load_data(self) -> pd.DataFrame:
+    def _load_data(self, strict: bool = True) -> pd.DataFrame:
         """Load BTC 15min data"""
         data_path = Path(__file__).parent / "data" / "btc_15m_data.csv"
-        
+    
         if not data_path.exists():
+            if strict:
+                raise FileNotFoundError(
+                f"btc_15m_data.csv not found at: {data_path}"
+            )
             logger.warning("btc_15m_data.csv not found - using mock data")
             return self._create_mock_data()
-        
+    
         df = pd.read_csv(data_path)
-        
+    
         # Parse timestamp
         timestamp_col = [col for col in df.columns if 'time' in col.lower()][0]
         df['timestamp'] = pd.to_datetime(df[timestamp_col])
         df.set_index('timestamp', inplace=True)
-        
+    
         # Standardize columns
         df = df.rename(columns={
-            col: col.lower().replace(' ', '_') 
-            for col in df.columns
+        col: col.lower().replace(' ', '_') 
+        for col in df.columns
         })
-        
+    
         return df[['open', 'high', 'low', 'close', 'volume']]
+
     
     def _create_mock_data(self) -> pd.DataFrame:
         """Create mock data for testing"""
@@ -160,7 +165,7 @@ class RiskAnalysisIntegration:
         return "\n".join(response_parts)
 
 
-def parse_user_intent_with_llm(ai_provider, user_message: str) -> UserIntent:
+def parse_user_intent_with_llm(ai_provider: Any, user_message: str) -> UserIntent:
     """
     Use LLM to extract structured intent from user message.
     
